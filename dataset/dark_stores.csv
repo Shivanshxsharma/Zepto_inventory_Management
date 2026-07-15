@@ -1,0 +1,11 @@
+﻿store_id,store_name,city,zone,locality,latitude,longitude,capacity_units,opened_date
+1,Zepto - Ashok Vihar,Delhi,North Delhi,Ashok Vihar,28.74655,77.20856,3638,2022-01-31
+2,Zepto - Model Town,Delhi,North Delhi,Model Town,28.69092,77.154647,4919,2023-10-06
+3,Zepto - Civil Lines,Delhi,North Delhi,Civil Lines,28.681441,77.227593,4853,2022-08-28
+4,Zepto - Saket,Delhi,South Delhi,Saket,28.514546,77.192838,2021,2022-09-29
+5,Zepto - Malviya Nagar,Delhi,South Delhi,Malviya Nagar,28.534556,77.200386,4558,2023-11-04
+6,Zepto - Saket,Delhi,South Delhi,Saket,28.503733,77.248163,4734,2023-06-26
+7,Zepto - Preet Vihar,Delhi,East Delhi,Preet Vihar,28.615974,77.295712,2646,2022-08-15
+8,Zepto - Laxmi Nagar,Delhi,East Delhi,Laxmi Nagar,28.63604,77.270663,4363,2022-05-11
+9,Zepto - Janakpuri,Delhi,West Delhi,Janakpuri,28.630833,77.051118,4139,2023-01-27
+10,Zepto - Paschim Vihar,Delhi,West Delhi,Paschim Vihar,28.609763,77.084662,4253,2023-11-28

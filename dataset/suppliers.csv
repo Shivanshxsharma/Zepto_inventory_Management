@@ -1,0 +1,19 @@
+﻿supplier_id,supplier_name,city,avg_lead_time_days
+1,"Choudhury, Bakshi and Maharaj",Delhi,2
+2,Kapoor and Sons,Delhi,5
+3,"Chaudry, Chahal and Sami",Delhi,3
+4,Balan Inc,Delhi,5
+5,Kaul PLC,Delhi,3
+6,"Bala, Issac and Saini",Delhi,7
+7,Sen PLC,Delhi,7
+8,Ahuja-Dutta,Delhi,7
+9,"Sami, Oak and Mall",Delhi,3
+10,Kale LLC,Delhi,5
+11,Chanda Group,Delhi,7
+12,Parmer LLC,Delhi,6
+13,"Lalla, Bassi and Sharaf",Delhi,3
+14,"Dash, Radhakrishnan and Brar",Delhi,3
+15,"Memon, Pathak and Handa",Delhi,5
+16,"Boase, Bath and Kari",Delhi,3
+17,Buch-Kaul,Delhi,3
+18,Rai LLC,Delhi,7
