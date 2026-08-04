@@ -5,3 +5,7 @@ __pycache__/
 venv/
 scratch/
 .system_generated/
+
+*.csv
+*.tsv
+trash/*

@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import DATASET_DIR, NUM_CUSTOMERS
+from config import DATASET_DIR, NUM_CUSTOMERS, get_store_demand_weights
 
 np.random.seed(42)
 
@@ -23,6 +23,7 @@ store_ids = stores["store_id"].values
 store_zones = dict(zip(stores["store_id"], stores["zone"]))
 sku_mrps = dict(zip(products["sku_id"], products["mrp"]))
 sku_demand_weights = dict(zip(products["sku_id"], products["demand_weight"]))
+store_demand_weights = get_store_demand_weights(DATASET_DIR)
 
 cust_by_zone = {}
 for zone in customers["zone"].unique():
@@ -30,18 +31,29 @@ for zone in customers["zone"].unique():
 all_cust_ids = customers["customer_id"].values
 
 start_date = datetime(2025, 1, 1)
-num_days = 31
+num_days = 90
 dates = [start_date + timedelta(days=i) for i in range(num_days)]
 date_strs = [d.strftime("%Y-%m-%d") for d in dates]
 is_weekend = [d.weekday() >= 5 for d in dates]
 
 # 2. Pre-process POs to daily received quantities
+# 04_purchase_orders.py must be run BEFORE this script, as this script depends on the purchase_orders.csv output for its starting inventory.
 pos_delivered = pos[pos["actual_delivery_date"].notna()].copy()
 received_agg = pos_delivered.groupby(["store_id", "sku_id", "actual_delivery_date"])["quantity_ordered"].sum().to_dict()
+
+# Build Opening Stock Lookup (from Dec 12, 2024)
+opening_stock_lookup = {}
+opening_pos = pos_delivered[pos_delivered["actual_delivery_date"] == "2024-12-12"]
+if not opening_pos.empty:
+    opening_grouped = opening_pos.groupby(["store_id", "sku_id"])["quantity_ordered"].sum().to_dict()
+    opening_stock_lookup = opening_grouped
 
 daily_sold_records = []
 total_stockouts = 0
 total_store_sku_days = 0
+
+opening_stock_zeros = 0
+opening_stock_successes = 0
 
 sample_traces = []
 sample_pairs = [(1, 1), (2, 5), (3, 10)]
@@ -51,10 +63,15 @@ print("Simulating daily sales against inventory constraints...")
 for sid in store_ids:
     for sku in products["sku_id"].values:
         dw = sku_demand_weights[sku]
-        avg_daily_demand = dw * 0.035
+        avg_daily_demand = dw * 0.10 * store_demand_weights.get(sid, 1.0)
         
-        # Seed inventory
-        available_stock = int(round(avg_daily_demand * np.random.uniform(15, 20)))
+        # Pull Seed inventory from actual POs
+        available_stock = opening_stock_lookup.get((sid, sku), 0)
+        
+        if available_stock == 0 and dw > 0:
+            opening_stock_zeros += 1
+        elif available_stock > 0:
+            opening_stock_successes += 1
         
         trace = []
         is_sample = (sid, sku) in sample_pairs
@@ -131,20 +148,24 @@ if not sold_df.empty:
         s_zone = store_zones[sid]
         z_custs = cust_by_zone.get(s_zone, all_cust_ids)
         
-        pool_skus = []
+        pool_items = []
         for _, row in group.iterrows():
-            pool_skus.extend([row["sku_id"]] * row["qty"])
+            rem = row["qty"]
+            while rem > 0:
+                take = min(rem, np.random.choice([1, 2, 3, 4], p=[0.5, 0.25, 0.15, 0.10]))
+                pool_items.append((row["sku_id"], take))
+                rem -= take
             
-        np.random.shuffle(pool_skus)
+        np.random.shuffle(pool_items)
         
         pool_idx = 0
-        total_pool = len(pool_skus)
+        total_pool = len(pool_items)
         
         # We generate the DELIVERED orders from the pool
         while pool_idx < total_pool:
             order_id += 1
             n_items = min(np.random.choice([1, 2, 3, 4, 5, 6], p=[0.25, 0.30, 0.20, 0.12, 0.08, 0.05]), total_pool - pool_idx)
-            order_skus = pool_skus[pool_idx : pool_idx + n_items]
+            order_skus = pool_items[pool_idx : pool_idx + n_items]
             pool_idx += n_items
             
             c_id = np.random.choice(z_custs) if np.random.random() < 0.8 else np.random.choice(all_cust_ids)
@@ -165,8 +186,9 @@ if not sold_df.empty:
                 "delivery_time_mins": del_time
             })
             
-            from collections import Counter
-            sku_counts = Counter(order_skus)
+            sku_counts = {}
+            for o_sku, o_qty in order_skus:
+                sku_counts[o_sku] = sku_counts.get(o_sku, 0) + o_qty
             
             for o_sku, o_qty in sku_counts.items():
                 item_id += 1
@@ -186,7 +208,7 @@ if not sold_df.empty:
         # Now generate a ~4% extra batch of CANCELLED orders. 
         # Since they are cancelled, they never permanently depleted available_stock.
         # This elegantly solves the requirement without complex mid-loop stock add-backs.
-        num_cancelled = int(np.ceil((order_id * 0.04) / 31)) # Rough daily amount per store
+        num_cancelled = int(np.ceil((order_id * 0.04) / 90)) # Rough daily amount per store
         if num_cancelled > 0:
             for _ in range(num_cancelled):
                 order_id += 1
@@ -236,6 +258,13 @@ print(f"Total Row Count - order_items.csv: {len(items_df):,}  (Target: 150k-300k
 
 stockout_rate = (total_stockouts / total_store_sku_days) * 100 if total_store_sku_days else 0
 print(f"Stockout Rate: {stockout_rate:.2f}% of store-sku-days had unmet demand.")
+
+print(f"\nOpening Stock Coverage:")
+print(f"  - Successfully seeded from POs: {opening_stock_successes:,} store-SKU pairs")
+if opening_stock_zeros > 0:
+    print(f"  - WARNING: {opening_stock_zeros:,} store-SKU pairs had demand > 0 but missing opening stock!")
+else:
+    print("  - Excellent: 0 store-SKU pairs missed opening stock.")
 
 print("\nSample Traces (Store, SKU):")
 for sid, sku, trace in sample_traces:

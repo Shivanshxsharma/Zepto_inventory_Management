@@ -4,6 +4,7 @@ All generation scripts import from here so the knobs live in one place.
 """
 
 import os
+import pandas as pd
 
 # -- Geography --------------------------------------------------------
 CITY = "Delhi"
@@ -34,7 +35,7 @@ LOCALITY_MAP = {
 # -- Entity counts ----------------------------------------------------
 NUM_STORES    = 10
 NUM_SUPPLIERS = 18
-NUM_CUSTOMERS = 3000
+NUM_CUSTOMERS = 50000
 
 # -- Date range: exactly one calendar month + day 0 ----------------------------
 DATE_RANGE = ("2024-12-31", "2025-01-31")
@@ -75,7 +76,33 @@ CATEGORY_DEMAND_WEIGHT = {
     "Home & Cleaning":        2,
 }
 
+# -- Store-level demand bias (zone affluence + capacity rank) ----------
+ZONE_DEMAND_TIER = {
+    "South Delhi": 1.3,
+    "North Delhi": 1.0,
+    "East Delhi":  1.0,
+    "West Delhi":  0.9,
+}
+
+def get_store_demand_weights(dataset_dir):
+    """Return {store_id: demand_weight} using a 60/40 blend of zone tier and capacity rank."""
+    stores = pd.read_csv(os.path.join(dataset_dir, "dark_stores.csv"), encoding="utf-8-sig")
+    stores_sorted = stores.sort_values("capacity_units", ascending=False).reset_index(drop=True)
+    n = len(stores_sorted)
+    top_cutoff, mid_cutoff = n // 3, 2 * n // 3
+    cap_mult = {}
+    for i, row in stores_sorted.iterrows():
+        sid = row["store_id"]
+        cap_mult[sid] = 1.3 if i < top_cutoff else (1.0 if i < mid_cutoff else 0.8)
+    weights = {}
+    for _, row in stores.iterrows():
+        sid = row["store_id"]
+        zone_mult = ZONE_DEMAND_TIER.get(row["zone"], 1.0)
+        weights[sid] = round(0.6 * zone_mult + 0.4 * cap_mult[sid], 2)
+    return weights
+
 # -- Paths -------------------------------------------------------------
 _SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 DATASET_DIR  = os.path.join(_SCRIPT_DIR, "..", "dataset")
 RAW_CSV_PATH = os.path.join(DATASET_DIR, "zepto_v2.csv")
+

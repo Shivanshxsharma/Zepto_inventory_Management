@@ -40,6 +40,9 @@ df.rename(columns={
 df["sku_name"] = df["sku_name"].str.strip()
 df["category"] = df["category"].str.strip()
 
+# Convert mrp from paise to rupees
+df["mrp"] = (df["mrp"] / 100).round(2)
+
 # -- 3. Deduplicate on (category, sku_name, mrp, unit_weight_grams) ---
 before = len(df)
 df.drop_duplicates(

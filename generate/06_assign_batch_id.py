@@ -16,12 +16,6 @@ def main():
         print(f"Error loading files: {e}")
         sys.exit(1)
 
-    # 1. Rename po_id -> batch_id in purchase_orders
-    if 'po_id' in po_df.columns:
-        po_df = po_df.rename(columns={'po_id': 'batch_id'})
-        po_df.to_csv(os.path.join(base_dir, 'purchase_orders.csv'), index=False)
-        print("Renamed po_id to batch_id in purchase_orders.csv and saved.")
-
     # 2. Process order_items
     print("Processing order items...")
     
@@ -48,10 +42,13 @@ def main():
     
     anomalies = []
     success_count = 0
+    split_count = 0
     total_to_process = len(items_to_process)
     
     sample_traces = []
     sample_count = 0
+
+    batch_assignments = {}
 
     # Optimization: pre-calculate everything into dicts for faster iteration inside groups
     # Group by store_id and sku_id
@@ -72,7 +69,7 @@ def main():
         is_sample = sample_count < 3 and len(group_items) > 0
         
         # Iterate over sales chronologically
-        for _, item in group_items.iterrows():
+        for item in group_items.to_dict('records'):
             sale_date = item['order_date']
             
             # 1. Add batches that have arrived by this sale_date
@@ -107,13 +104,17 @@ def main():
                     
             if qty_needed > 0:
                 # Could not fully fulfill
-                anomalies.append(item.to_dict())
+                anomalies.append(item)
             else:
                 # Successfully fulfilled, find batch with max contribution
                 best_batch_id = max(batch_contributions.items(), key=lambda x: x[1])[0]
-                # Update in main dataframe
-                # We use order_item_id to locate the exact row
-                order_items_df.loc[order_items_df['order_item_id'] == item['order_item_id'], 'batch_id'] = best_batch_id
+                # Update our dictionary
+                batch_assignments[item['order_item_id']] = best_batch_id
+
+                    
+                if len(batch_contributions) > 1:
+                    split_count += 1
+                    
                 success_count += 1
                 if is_sample:
                     trace.append(f"-> SALE: Item ID {item['order_item_id']} on {sale_date.date()} for qty {item['quantity']} -> Assigned to Batch {best_batch_id}")
@@ -124,9 +125,14 @@ def main():
             sample_traces.append((store_id, sku_id, trace))
             sample_count += 1
             
+    # Apply assignments using mapping (O(N) operation instead of O(N^2))
+    print("Applying batch assignments...")
+    order_items_df['batch_id'] = order_items_df['order_item_id'].map(batch_assignments)
+
     # Save output
     order_items_df.to_csv(os.path.join(base_dir, 'order_items.csv'), index=False)
     print("Appended batch_id to order_items.csv and saved.")
+
     
     # 3. Validation Summary
     print("\n" + "="*50)
@@ -137,7 +143,11 @@ def main():
     success_rate = (success_count / total_to_process) * 100 if total_to_process > 0 else 0
     print(f"Items successfully assigned a batch_id: {success_count} ({success_rate:.2f}%)")
     
-    print(f"Anomalies (could not match stock): {len(anomalies)}")
+    split_rate = (split_count / success_count) * 100 if success_count > 0 else 0
+    print(f"Items fulfilled from multiple batches (splits): {split_count} ({split_rate:.2f}% of successes)")
+    
+    anomaly_rate = (len(anomalies) / total_to_process) * 100 if total_to_process > 0 else 0
+    print(f"\nAnomalies (could not match stock): {len(anomalies)} ({anomaly_rate:.2f}%)")
     if len(anomalies) > 0:
         print("Sample of anomalies:")
         for a in anomalies[:5]:
