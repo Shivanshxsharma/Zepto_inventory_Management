@@ -10,8 +10,10 @@ CREATE TABLE IF NOT EXISTS fact_daily_sales (
     order_date DATE,
     sku_id INT,
     sku_name VARCHAR(255),
+    category VARCHAR(100),
     total_quantity_sold INT,
     total_revenue DECIMAL(15, 2),
+    total_profit DECIMAL(15, 2),
     PRIMARY KEY (store_id, sku_id, order_date)
 );
 
@@ -23,8 +25,10 @@ SELECT
     o.order_date,
     p.sku_id,
     p.sku_name,
+    p.category,
     SUM(oi.quantity) AS total_quantity_sold,
-    SUM(oi.quantity * oi.unit_price_at_sale) AS total_revenue
+    SUM(oi.quantity * oi.unit_price_at_sale) AS total_revenue,
+    SUM(oi.quantity * (oi.unit_price_at_sale - p.unit_cost)) AS total_profit
 FROM orders o
 -- Filter early to reduce join payload
 JOIN order_items oi ON o.order_id = oi.order_id
@@ -36,7 +40,8 @@ GROUP BY
     ds.store_name,
     o.order_date,
     p.sku_id,
-    p.sku_name;
+    p.sku_name,
+    p.category;
 
 -- Now, whenever you need your Items Sold data for analysis, 
 -- you just query the aggregated table extremely fast:

@@ -35,7 +35,18 @@ ranked AS (
         ROUND(
             SUM(total_revenue) OVER (ORDER BY total_revenue DESC) * 100.0
             / NULLIF(SUM(total_revenue) OVER (), 0)
-        , 2) AS cumulative_pct
+        , 2) AS cumulative_pct,
+        ROUND(
+            total_revenue * 100.0
+            / NULLIF(SUM(total_revenue) OVER (), 0)
+        , 2) AS sku_revenue_pct,
+        ROUND(
+            COUNT(sku_id) OVER (ORDER BY total_revenue DESC) * 100.0
+            / NULLIF(COUNT(sku_id) OVER (), 0)
+        , 4) AS cumulative_sku_pct,
+        ROUND(
+            100.0 / NULLIF(COUNT(sku_id) OVER (), 0)
+        , 4) AS sku_pct
     FROM sku_revenue
 )
 
@@ -44,7 +55,10 @@ SELECT
     sku_id,
     sku_name,
     total_revenue,
-    cumulative_pct,
+    sku_revenue_pct,
+    cumulative_pct AS cumulative_revenue_pct,
+    sku_pct,
+    cumulative_sku_pct,
     CASE
         WHEN cumulative_pct <= 70 THEN 'A'
         WHEN cumulative_pct <= 90 THEN 'B'

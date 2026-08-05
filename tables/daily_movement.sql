@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS fact_daily_movement (
     sku_id INT,
     sku_name VARCHAR(255),
     total_quantity_sold INT,
+    total_sold_value DECIMAL(12, 2),
     total_quantity_purchased INT,
+    total_purchased_value DECIMAL(12, 2),
     PRIMARY KEY (movement_date, store_id, sku_id)
 );
 
@@ -23,7 +25,8 @@ WITH daily_sales AS (
         o.order_date AS movement_date,
         o.store_id,
         oi.sku_id,
-        SUM(oi.quantity) AS quantity_sold
+        SUM(oi.quantity) AS quantity_sold,
+        SUM(oi.quantity * oi.unit_price_at_sale) AS sold_value
     FROM orders o
     JOIN order_items oi ON o.order_id = oi.order_id
     WHERE o.order_status = 'delivered'
@@ -37,7 +40,8 @@ daily_purchases AS (
         actual_delivery_date AS movement_date,
         store_id,
         sku_id,
-        SUM(quantity_ordered) AS quantity_purchased
+        SUM(quantity_ordered) AS quantity_purchased,
+        SUM(quantity_ordered * cost_price) AS purchased_value
     FROM purchase_orders
     WHERE actual_delivery_date IS NOT NULL
     GROUP BY 
@@ -51,7 +55,9 @@ combined_movement AS (
         store_id,
         sku_id,
         quantity_sold,
-        0 AS quantity_purchased
+        sold_value,
+        0 AS quantity_purchased,
+        0 AS purchased_value
     FROM daily_sales
     UNION ALL
     SELECT 
@@ -59,7 +65,9 @@ combined_movement AS (
         store_id,
         sku_id,
         0 AS quantity_sold,
-        quantity_purchased
+        0 AS sold_value,
+        quantity_purchased,
+        purchased_value
     FROM daily_purchases
 )
 SELECT 
@@ -69,7 +77,9 @@ SELECT
     cm.sku_id,
     p.sku_name,
     SUM(cm.quantity_sold) AS total_quantity_sold,
-    SUM(cm.quantity_purchased) AS total_quantity_purchased
+    ROUND(SUM(cm.sold_value), 2) AS total_sold_value,
+    SUM(cm.quantity_purchased) AS total_quantity_purchased,
+    ROUND(SUM(cm.purchased_value), 2) AS total_purchased_value
 FROM combined_movement cm
 JOIN dark_stores ds ON cm.store_id = ds.store_id
 JOIN products p ON cm.sku_id = p.sku_id

@@ -45,6 +45,7 @@ ranked_velocity AS (
         v.store_id,
         v.sku_id,
         v.total_units_sold,
+        v.days_available,
         v.sales_velocity,
         v.adjusted_velocity_days_available,
         NTILE(10) OVER (PARTITION BY v.store_id ORDER BY v.sales_velocity DESC) AS velocity_decile
@@ -57,6 +58,7 @@ SELECT
     p.sku_name,
     p.category,
     r.total_units_sold,
+    r.days_available,
     r.sales_velocity,
     r.adjusted_velocity_days_available,
     CASE 
